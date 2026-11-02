@@ -1,0 +1,392 @@
+{
+  "name": "Project 1",
+  "nodes": [
+    {
+      "parameters": {
+        "model": "qwen2.5-coder:latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        352,
+        352
+      ],
+      "id": "19a11efa-a8a8-439d-a85d-3c6b379056fe",
+      "name": "Ollama Chat Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "rGrwXmjJU9GLgr0J",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chromaCollection": {
+          "__rl": true,
+          "value": "hr_schema_v3",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreChromaDB",
+      "typeVersion": 1.3,
+      "position": [
+        864,
+        256
+      ],
+      "id": "9b3e402c-3b5d-4fe7-8994-e6eab73206d3",
+      "name": "Chroma Vector Store",
+      "credentials": {
+        "chromaSelfHostedApi": {
+          "id": "myhrusv5Uqbg0mcY",
+          "name": "ChromaDB Self-Hosted account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        432
+      ],
+      "id": "f7ec8254-0fe8-4dd8-9782-23ee6e86c376",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "rGrwXmjJU9GLgr0J",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        704,
+        -112
+      ],
+      "id": "dd439c70-2b2a-4f0d-b806-7acb0a02994d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "chromaCollection": {
+          "__rl": true,
+          "value": "hr_schema_v3",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreChromaDB",
+      "typeVersion": 1.3,
+      "position": [
+        1152,
+        -112
+      ],
+      "id": "cd0a86cd-09e0-4db3-b130-6cd127c7b7b5",
+      "name": "Chroma Vector Store1",
+      "credentials": {
+        "chromaSelfHostedApi": {
+          "id": "myhrusv5Uqbg0mcY",
+          "name": "ChromaDB Self-Hosted account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1264,
+        112
+      ],
+      "id": "bca3d085-037c-4845-ae3e-159c3e355e0b",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.chatInput }}",
+        "options": {
+          "systemPromptTemplate": "You are a deterministic, schema-grounded Text-to-SQL engine.\nGiven the schema and reference patterns in {context}, generate an executable Oracle SQL query for the user request.\n\nOperational Rules:\n\nGrounding: Rely strictly on tables and columns defined in the context. Never invent shortcuts or attributes.\n\nTraversal: Follow foreign keys through intermediary tables when navigating distant entities.\n\nEntity Precision: Use exact table names from the schema (do not singularize or alter plurals).\n\nCurrent vs Historical State: For current job titles, roles, or compensation, join the JOBS table via e.job_id = j.job_id. Use JOB_HISTORY strictly when the user explicitly asks about past positions, previous roles, or job transitions.\n\nCRITICAL FORMATTING RULE:\nOutput ONLY the raw SQL query. Do NOT output markdown formatting. Do NOT use sql or . Start immediately with SELECT or WITH.\n\nCRITICAL SCHEMA TRAVERSAL HINTS:\n- To link an Employee to a Region, you MUST join exactly: EMPLOYEES -> DEPARTMENTS -> LOCATIONS -> COUNTRIES -> REGIONS.\n- Do NOT skip intermediate tables (like COUNTRIES). LOCATIONS does not connect directly to REGIONS.\n- To find an employee's manager, self-join the EMPLOYEES table: JOIN employees m ON e.manager_id = m.employee_id.\n- For top N rankings per category, always use a CTE with ROW_NUMBER() or DENSE_RANK() OVER (PARTITION BY category ORDER BY value DESC) and filter WHERE rank <= N.\n\nGOLDEN PATTERNS (Reference these for complex queries):\n- Top Paid Employees Per Region:\nWITH regional_salaries AS (SELECT e.employee_id, e.first_name || ' ' || e.last_name AS employee_name, d.department_name, r.region_name, (e.salary * (1 + NVL(e.commission_pct, 0)) * 12) AS annual_compensation, ROW_NUMBER() OVER (PARTITION BY r.region_id ORDER BY (e.salary * (1 + NVL(e.commission_pct, 0))) DESC) AS rank_in_region FROM hr.employees e JOIN hr.departments d ON e.department_id = d.department_id JOIN hr.locations l ON d.location_id = l.location_id JOIN hr.countries c ON l.country_id = c.country_id JOIN hr.regions r ON c.region_id = r.region_id) SELECT region_name, employee_name, department_name, ROUND(annual_compensation, 2) AS total_annual_compensation FROM regional_salaries WHERE rank_in_region <= 2 ORDER BY region_name, rank_in_region;\n\n- CTE Usage & Column Scope: ONLY use a CTE (WITH clause) when the query requires window functions (like ROW_NUMBER, RANK, DENSE_RANK) or multi-stage aggregations. For standard filtering and joins, write a direct SELECT query without a CTE. If you do use a CTE, ensure every column referenced in the outer SELECT or WHERE clause (such as e.salary) is explicitly included in the CTE's SELECT list.\n- Salary Ranges / Bands: The JOBS table already contains predefined policy columns (j.min_salary and j.max_salary). When asked about salary ranges, bands, or limits for a job, write a direct SELECT joining EMPLOYEES and JOBS, and filter with WHERE e.salary < j.min_salary OR e.salary > j.max_salary."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainRetrievalQa",
+      "typeVersion": 1.7,
+      "position": [
+        272,
+        48
+      ],
+      "id": "b81e5162-b6b9-43d8-9fd0-e6a407e1650a",
+      "name": "Question and Answer Chain"
+    },
+    {
+      "parameters": {
+        "topK": 7
+      },
+      "type": "@n8n/n8n-nodes-langchain.retrieverVectorStore",
+      "typeVersion": 1,
+      "position": [
+        512,
+        288
+      ],
+      "id": "b5b71585-e497-493e-92a0-d6e6bfce5a8a",
+      "name": "Vector Store Retriever"
+    },
+    {
+      "parameters": {
+        "jsCode": "const schemaData = {\n  \"tables\": [\n    {\n      \"name\": \"REGIONS\",\n      \"comment\": \"Regions such as Europe, Asia, Americas.\",\n      \"approx_rows\": 4,\n      \"columns\": [\n        { \"name\": \"REGION_ID\", \"data_type\": \"NUMBER\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of regions table\" },\n        { \"name\": \"REGION_NAME\", \"data_type\": \"VARCHAR2(25)\", \"nullable\": true, \"default\": null, \"comment\": null }\n      ],\n      \"constraints\": [\n        { \"name\": \"REG_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"REGION_ID\" ] }\n      ],\n      \"indexes\": [\n        { \"name\": \"REG_ID_PK\", \"columns\": [ \"REGION_ID\" ], \"unique\": true, \"note\": \"system index for PK\" }\n      ],\n      \"storage\": \"heap\"\n    },\n    {\n      \"name\": \"COUNTRIES\",\n      \"comment\": \"Country table. References regions table.\",\n      \"approx_rows\": 25,\n      \"columns\": [\n        { \"name\": \"COUNTRY_ID\", \"data_type\": \"CHAR(2)\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of countries table\" },\n        { \"name\": \"COUNTRY_NAME\", \"data_type\": \"VARCHAR2(40)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"REGION_ID\", \"data_type\": \"NUMBER\", \"nullable\": true, \"default\": null, \"comment\": \"Region where country is located\" }\n      ],\n      \"constraints\": [\n        { \"name\": \"COUNTRY_C_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"COUNTRY_ID\" ] },\n        { \"name\": \"COUNTR_REG_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"REGION_ID\" ], \"references\": \"REGIONS(REGION_ID)\" }\n      ],\n      \"indexes\": [\n        { \"name\": \"COUNTRY_C_ID_PK\", \"columns\": [ \"COUNTRY_ID\" ], \"unique\": true }\n      ],\n      \"storage\": \"index-organized table (ORGANIZATION INDEX)\"\n    },\n    {\n      \"name\": \"LOCATIONS\",\n      \"comment\": \"Office, warehouse and production-site addresses.\",\n      \"approx_rows\": 23,\n      \"columns\": [\n        { \"name\": \"LOCATION_ID\", \"data_type\": \"NUMBER(4)\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of locations table\" },\n        { \"name\": \"STREET_ADDRESS\", \"data_type\": \"VARCHAR2(40)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"POSTAL_CODE\", \"data_type\": \"VARCHAR2(12)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"CITY\", \"data_type\": \"VARCHAR2(30)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"STATE_PROVINCE\", \"data_type\": \"VARCHAR2(25)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"COUNTRY_ID\", \"data_type\": \"CHAR(2)\", \"nullable\": true, \"default\": null, \"comment\": \"Country where the location is\" }\n      ],\n      \"constraints\": [\n        { \"name\": \"LOC_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"LOCATION_ID\" ] },\n        { \"name\": \"LOC_C_ID_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"COUNTRY_ID\" ], \"references\": \"COUNTRIES(COUNTRY_ID)\" }\n      ],\n      \"indexes\": [\n        { \"name\": \"LOC_ID_PK\", \"columns\": [ \"LOCATION_ID\" ], \"unique\": true },\n        { \"name\": \"LOC_CITY_IX\", \"columns\": [ \"CITY\" ], \"unique\": false },\n        { \"name\": \"LOC_STATE_PROVINCE_IX\", \"columns\": [ \"STATE_PROVINCE\" ], \"unique\": false },\n        { \"name\": \"LOC_COUNTRY_IX\", \"columns\": [ \"COUNTRY_ID\" ], \"unique\": false }\n      ],\n      \"storage\": \"heap\"\n    },\n    {\n      \"name\": \"DEPARTMENTS\",\n      \"comment\": \"Departments where employees work. References locations and employees (manager).\",\n      \"approx_rows\": 27,\n      \"columns\": [\n        { \"name\": \"DEPARTMENT_ID\", \"data_type\": \"NUMBER(4)\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of departments table\" },\n        { \"name\": \"DEPARTMENT_NAME\", \"data_type\": \"VARCHAR2(30)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"MANAGER_ID\", \"data_type\": \"NUMBER(6)\", \"nullable\": true, \"default\": null, \"comment\": \"Manager of the department (employee id)\" },\n        { \"name\": \"LOCATION_ID\", \"data_type\": \"NUMBER(4)\", \"nullable\": true, \"default\": null, \"comment\": \"Location id where the department is located\" }\n      ],\n      \"constraints\": [\n        { \"name\": \"DEPT_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"DEPARTMENT_ID\" ] },\n        { \"name\": \"DEPT_LOC_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"LOCATION_ID\" ], \"references\": \"LOCATIONS(LOCATION_ID)\" },\n        { \"name\": \"DEPT_MGR_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"MANAGER_ID\" ], \"references\": \"EMPLOYEES(EMPLOYEE_ID)\", \"note\": \"added via ALTER TABLE after EMPLOYEES is created (circular dependency)\" }\n      ],\n      \"indexes\": [\n        { \"name\": \"DEPT_ID_PK\", \"columns\": [ \"DEPARTMENT_ID\" ], \"unique\": true },\n        { \"name\": \"DEPT_LOCATION_IX\", \"columns\": [ \"LOCATION_ID\" ], \"unique\": false }\n      ],\n      \"storage\": \"heap\"\n    },\n    {\n      \"name\": \"JOBS\",\n      \"comment\": \"Jobs that employees can hold, with salary ranges.\",\n      \"approx_rows\": 19,\n      \"columns\": [\n        { \"name\": \"JOB_ID\", \"data_type\": \"VARCHAR2(10)\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of jobs table\" },\n        { \"name\": \"JOB_TITLE\", \"data_type\": \"VARCHAR2(35)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"MIN_SALARY\", \"data_type\": \"NUMBER(6)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"MAX_SALARY\", \"data_type\": \"NUMBER(6)\", \"nullable\": true, \"default\": null, \"comment\": null }\n      ],\n      \"constraints\": [\n        { \"name\": \"JOB_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"JOB_ID\" ] }\n      ],\n      \"indexes\": [\n        { \"name\": \"JOB_ID_PK\", \"columns\": [ \"JOB_ID\" ], \"unique\": true }\n      ],\n      \"storage\": \"heap\"\n    },\n    {\n      \"name\": \"EMPLOYEES\",\n      \"comment\": \"Employee details. References departments, jobs and itself (manager).\",\n      \"approx_rows\": 107,\n      \"columns\": [\n        { \"name\": \"EMPLOYEE_ID\", \"data_type\": \"NUMBER(6)\", \"nullable\": false, \"default\": null, \"comment\": \"Primary key of employees table\" },\n        { \"name\": \"FIRST_NAME\", \"data_type\": \"VARCHAR2(20)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"LAST_NAME\", \"data_type\": \"VARCHAR2(25)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"EMAIL\", \"data_type\": \"VARCHAR2(25)\", \"nullable\": false, \"default\": null, \"comment\": \"Unique\" },\n        { \"name\": \"PHONE_NUMBER\", \"data_type\": \"VARCHAR2(20)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"HIRE_DATE\", \"data_type\": \"DATE\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"JOB_ID\", \"data_type\": \"VARCHAR2(10)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"SALARY\", \"data_type\": \"NUMBER(8,2)\", \"nullable\": true, \"default\": null, \"comment\": \"Must be > 0\" },\n        { \"name\": \"COMMISSION_PCT\", \"data_type\": \"NUMBER(2,2)\", \"nullable\": true, \"default\": null, \"comment\": null },\n        { \"name\": \"MANAGER_ID\", \"data_type\": \"NUMBER(6)\", \"nullable\": true, \"default\": null, \"comment\": \"Manager's employee id (self reference)\" },\n        { \"name\": \"DEPARTMENT_ID\", \"data_type\": \"NUMBER(4)\", \"nullable\": true, \"default\": null, \"comment\": null }\n      ],\n      \"constraints\": [\n        { \"name\": \"EMP_EMP_ID_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"EMPLOYEE_ID\" ] },\n        { \"name\": \"EMP_EMAIL_UK\", \"type\": \"UNIQUE\", \"columns\": [ \"EMAIL\" ] },\n        { \"name\": \"EMP_SALARY_MIN\", \"type\": \"CHECK\", \"condition\": \"salary > 0\" },\n        { \"name\": \"EMP_DEPT_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"DEPARTMENT_ID\" ], \"references\": \"DEPARTMENTS(DEPARTMENT_ID)\" },\n        { \"name\": \"EMP_JOB_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"JOB_ID\" ], \"references\": \"JOBS(JOB_ID)\" },\n        { \"name\": \"EMP_MANAGER_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"MANAGER_ID\" ], \"references\": \"EMPLOYEES(EMPLOYEE_ID)\" }\n      ],\n      \"indexes\": [\n        { \"name\": \"EMP_EMP_ID_PK\", \"columns\": [ \"EMPLOYEE_ID\" ], \"unique\": true },\n        { \"name\": \"EMP_EMAIL_UK\", \"columns\": [ \"EMAIL\" ], \"unique\": true },\n        { \"name\": \"EMP_DEPARTMENT_IX\", \"columns\": [ \"DEPARTMENT_ID\" ], \"unique\": false },\n        { \"name\": \"EMP_JOB_IX\", \"columns\": [ \"JOB_ID\" ], \"unique\": false },\n        { \"name\": \"EMP_MANAGER_IX\", \"columns\": [ \"MANAGER_ID\" ], \"unique\": false },\n        { \"name\": \"EMP_NAME_IX\", \"columns\": [ \"LAST_NAME\", \"FIRST_NAME\" ], \"unique\": false }\n      ],\n      \"storage\": \"heap\"\n    },\n    {\n      \"name\": \"JOB_HISTORY\",\n      \"comment\": \"Employee job history; a row is written when an employee changes job or department.\",\n      \"approx_rows\": 10,\n      \"columns\": [\n        { \"name\": \"EMPLOYEE_ID\", \"data_type\": \"NUMBER(6)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"START_DATE\", \"data_type\": \"DATE\", \"nullable\": false, \"default\": null, \"comment\": \"Must be less than END_DATE\" },\n        { \"name\": \"END_DATE\", \"data_type\": \"DATE\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"JOB_ID\", \"data_type\": \"VARCHAR2(10)\", \"nullable\": false, \"default\": null, \"comment\": null },\n        { \"name\": \"DEPARTMENT_ID\", \"data_type\": \"NUMBER(4)\", \"nullable\": true, \"default\": null, \"comment\": null }\n      ],\n      \"constraints\": [\n        { \"name\": \"JHIST_EMP_ID_ST_DATE_PK\", \"type\": \"PRIMARY KEY\", \"columns\": [ \"EMPLOYEE_ID\", \"START_DATE\" ] },\n        { \"name\": \"JHIST_DATE_INTERVAL\", \"type\": \"CHECK\", \"condition\": \"end_date > start_date\" },\n        { \"name\": \"JHIST_JOB_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"JOB_ID\" ], \"references\": \"JOBS(JOB_ID)\" },\n        { \"name\": \"JHIST_EMP_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"EMPLOYEE_ID\" ], \"references\": \"EMPLOYEES(EMPLOYEE_ID)\" },\n        { \"name\": \"JHIST_DEPT_FK\", \"type\": \"FOREIGN KEY\", \"columns\": [ \"DEPARTMENT_ID\" ], \"references\": \"DEPARTMENTS(DEPARTMENT_ID)\" }\n      ],\n      \"indexes\": [\n        { \"name\": \"JHIST_EMP_ID_ST_DATE_PK\", \"columns\": [ \"EMPLOYEE_ID\", \"START_DATE\" ], \"unique\": true },\n        { \"name\": \"JHIST_JOB_IX\", \"columns\": [ \"JOB_ID\" ], \"unique\": false },\n        { \"name\": \"JHIST_EMPLOYEE_IX\", \"columns\": [ \"EMPLOYEE_ID\" ], \"unique\": false },\n        { \"name\": \"JHIST_DEPARTMENT_IX\", \"columns\": [ \"DEPARTMENT_ID\" ], \"unique\": false }\n      ],\n      \"storage\": \"heap\"\n    }\n  ]\n};\n\nreturn schemaData.tables.map(table => {\n  return {\n    json: {\n      text: `TABLE NAME: ${table.name}\\nDESCRIPTION: ${table.comment || 'N/A'}\\nSCHEMA DEFINITION:\\n${JSON.stringify(table, null, 2)}`,\n      metadata: {\n        tableName: table.name,\n        type: \"database_table\"\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -112
+      ],
+      "id": "087549aa-f208-4525-8d25-b856f525b8f6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9c60cfec-1d7f-4f8f-91fd-bd25eb857898",
+              "name": "=cleaned_sql",
+              "value": "={{ $json.response.replace(/```sql\\n/g, '').replace(/```/g, '').replace(/\\n/g, ' ').trim() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        640,
+        48
+      ],
+      "id": "15788d17-c4ca-45df-9de3-6a6e9a0c5186",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-sql",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        32,
+        48
+      ],
+      "id": "804f700c-73a8-4771-8d14-7e471f4d4200",
+      "name": "Webhook",
+      "webhookId": "5eba77b5-5111-4288-b863-856e1ca49449",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"sql_query\": $json.cleaned_sql } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        848,
+        48
+      ],
+      "id": "88b6005e-9010-400c-8389-bc019da843bb",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "chunkSize": 10000
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterTokenSplitter",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        320
+      ],
+      "id": "4f61fbbd-260f-46fb-8b0b-897d022f994d",
+      "name": "Token Splitter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Question and Answer Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chroma Vector Store": {
+      "ai_vectorStore": [
+        [
+          {
+            "node": "Vector Store Retriever",
+            "type": "ai_vectorStore",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Chroma Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "Chroma Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Chroma Vector Store1",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector Store Retriever": {
+      "ai_retriever": [
+        [
+          {
+            "node": "Question and Answer Chain",
+            "type": "ai_retriever",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Chroma Vector Store1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Question and Answer Chain": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Question and Answer Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a2bf1050-bdb3-40a6-b927-770a6014330b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a90f8a9af2dcc6b7e52912ba2eff91c955c6d8d947e6e3632e128cd19f58e10c"
+  },
+  "nodeGroups": [],
+  "id": "RfpQNxO2w3gHDi5P",
+  "tags": []
+}
