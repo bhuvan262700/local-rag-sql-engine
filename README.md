@@ -36,9 +36,9 @@ git clone [https://github.com/bhuvan262700/local-rag-sql-engine.git](https://git
 cd local-rag-sql-engine
 npm install
 
-# If 'npm install' fails to execute on your Windows environment, explicitly run:
+(If 'npm install' fails to execute on your Windows environment, explicitly run:
 npm.cmd install
-npm.cmd run dev
+npm.cmd run dev )
 
 2. LLM & Vector DB Setup
 Pull the required generative and embedding models into your local Ollama registry:
