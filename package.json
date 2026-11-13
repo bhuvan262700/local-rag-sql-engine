@@ -14,9 +14,11 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.5.0",
     "@mui/material": "^9.5.0",
+    "chromadb": "^3.5.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-syntax-highlighter": "^16.1.2"
+    "react-syntax-highlighter": "^16.1.2",
+    "sql-formatter": "^15.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
