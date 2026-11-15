@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 
 function App() {
@@ -6,7 +6,23 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentSession, setCurrentSession] = useState(null);
-  const [history, setHistory] = useState([]); // Starts empty now
+  
+  // Load history from localStorage on initial render
+  const [history, setHistory] = useState(() => {
+    const savedHistory = localStorage.getItem('sql_session_history');
+    return savedHistory ? JSON.parse(savedHistory) : [];
+  });
+
+  // Save to localStorage automatically whenever history changes
+  useEffect(() => {
+    localStorage.setItem('sql_session_history', JSON.stringify(history));
+  }, [history]);
+
+  // Reduced to 2 sample questions
+  const sampleQuestions = [
+    "Show me the first name, last name, and salary of all employees who make more than 10,000.",
+    "What is the total number of employees and the average salary for each department?"
+  ];
 
   const generateSQL = async (e) => {
     e.preventDefault();
@@ -16,7 +32,6 @@ function App() {
     setError('');
     
     try {
-      // REPLACE THIS URL with your copied n8n Webhook Test URL
       const webhookUrl = 'http://localhost:5678/webhook/generate-sql';
       
       const response = await fetch(webhookUrl, {
@@ -51,7 +66,6 @@ function App() {
       };
 
       setCurrentSession(newSession);
-      // Add the full session to history so it can be retrieved later
       setHistory(prevHistory => [newSession, ...prevHistory]);
       setQuestion('');
 
@@ -76,6 +90,7 @@ function App() {
     setHistory([]);
     setCurrentSession(null);
     setError('');
+    localStorage.removeItem('sql_session_history');
   };
 
   return (
@@ -100,11 +115,18 @@ function App() {
           
           {error && <div style={{ color: '#ef4444', padding: '1rem', backgroundColor: '#7f1d1d33', borderRadius: '0.5rem' }}>{error}</div>}
 
+          {!currentSession && history.length === 0 && (
+             <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', color: '#64748b', flexDirection: 'column', gap: '1rem' }}>
+               <h2 style={{ margin: 0 }}>Welcome to the AI Database Assistant</h2>
+               <p>Ask a question below, or select a sample to get started.</p>
+             </div>
+          )}
+
           {currentSession && (
             <>
               {/* User Question Bubble */}
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                <div style={{ backgroundColor: '#3b82f6', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>U</div>
+                <div style={{ backgroundColor: '#3b82f6', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>U</div>
                 <div style={{ backgroundColor: '#1e293b', padding: '1rem 1.5rem', borderRadius: '0 1rem 1rem 1rem', border: '1px solid #334155', maxWidth: '80%' }}>
                   {currentSession.question}
                 </div>
@@ -112,7 +134,7 @@ function App() {
 
               {/* AI Response Block */}
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                <div style={{ backgroundColor: '#f59e0b', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#000' }}>✨</div>
+                <div style={{ backgroundColor: '#f59e0b', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: '#000', flexShrink: 0 }}>✨</div>
                 
                 <div style={{ backgroundColor: '#1e293b', borderRadius: '0.5rem', border: '1px solid #334155', width: '100%', overflow: 'hidden' }}>
                   
@@ -142,7 +164,7 @@ function App() {
                           <thead>
                             <tr style={{ borderBottom: '1px solid #334155' }}>
                               {getHeaders(currentSession.results).map((header) => (
-                                <th key={header} style={{ padding: '0.75rem', color: '#38bdf8', fontWeight: '600' }}>{header}</th>
+                                <th key={header} style={{ padding: '0.75rem', color: '#38bdf8', fontWeight: '600', whiteSpace: 'nowrap' }}>{header}</th>
                               ))}
                             </tr>
                           </thead>
@@ -167,8 +189,28 @@ function App() {
           )}
         </div>
 
-        {/* Input Area */}
+        {/* Input Area with Sample Questions */}
         <div style={{ marginTop: '2rem' }}>
+          
+          {/* Sample Questions Chips */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexDirection: 'column', marginBottom: '1rem', alignItems: 'flex-start' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.875rem', fontWeight: '500' }}>Try asking:</span>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {sampleQuestions.map((sq, index) => (
+                <button 
+                  key={index}
+                  onClick={() => setQuestion(sq)}
+                  style={{ backgroundColor: '#1e293b', border: '1px solid #334155', color: '#cbd5e1', padding: '0.6rem 1rem', borderRadius: '9999px', fontSize: '0.875rem', cursor: 'pointer', transition: 'border-color 0.2s', textAlign: 'left', lineHeight: '1.4' }}
+                  onMouseOver={(e) => e.currentTarget.style.borderColor = '#3b82f6'}
+                  onMouseOut={(e) => e.currentTarget.style.borderColor = '#334155'}
+                >
+                  {/* Removed truncation so the full question shows */}
+                  {sq}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <form onSubmit={generateSQL} style={{ position: 'relative' }}>
             <textarea 
               value={question}
@@ -179,8 +221,8 @@ function App() {
             />
             <button 
               type="submit" 
-              disabled={loading}
-              style={{ position: 'absolute', right: '1rem', bottom: '1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: '500' }}
+              disabled={loading || !question.trim()}
+              style={{ position: 'absolute', right: '1rem', bottom: '1rem', backgroundColor: '#2563eb', color: 'white', border: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', cursor: (loading || !question.trim()) ? 'not-allowed' : 'pointer', fontWeight: '500', opacity: (loading || !question.trim()) ? 0.6 : 1 }}
             >
               {loading ? 'Processing...' : '⚡ Generate SQL'}
             </button>
@@ -191,15 +233,28 @@ function App() {
       {/* Right Sidebar - Session History */}
       <div style={{ width: '320px', backgroundColor: '#1e293b', borderLeft: '1px solid #334155', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '1.5rem', borderBottom: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <h2 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', userSelect: 'none' }}>
             <span style={{ color: '#94a3b8' }}>⏱</span> Session History
           </h2>
-          <span 
+          {/* Changed from span to a styled button for Clear Chat */}
+          <button 
             onClick={clearChat} 
-            style={{ color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}
+            style={{ 
+              backgroundColor: '#7f1d1d', 
+              color: '#fca5a5', 
+              border: 'none',
+              padding: '0.4rem 0.75rem',
+              borderRadius: '0.25rem',
+              fontSize: '0.75rem', 
+              cursor: 'pointer', 
+              fontWeight: 'bold',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#991b1b'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#7f1d1d'}
           >
             Clear Chat
-          </span>
+          </button>
         </div>
         <div style={{ padding: '1rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {history.length === 0 && (
