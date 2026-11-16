@@ -63,15 +63,13 @@ Because n8n runs inside an isolated Docker container, relying on localhost or ho
 
    5.Configure Oracle Database Credentials: Double-click the Execute SQL node. Create an Oracle credential mapping to your database:
 
-        Host: <YOUR-IPV4-ADDRESS>
+      User: devuser
 
-        Port: 1521
+      Password: <YOUR-ORACLE-PASSWORD>
 
-        Database/Service: FREEPDB1
+      Connection String: <YOUR-IPV4-ADDRESS>:1521/FREEPDB1
 
-        User: devuser
-
-    6.Open the Webhook node, ensure the path is set to generate-sql, and click Publish to activate the pipeline.
+   6.Open the Webhook node, ensure the path is set to generate-sql, and click Publish to activate the pipeline.
 
 ⚡ Daily Execution
 Once the initial setup and credential configuration are complete, you do not need to run the manual commands again.
